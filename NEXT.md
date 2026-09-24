@@ -33,12 +33,21 @@ updated: 2026-09-24
 - **real-host**：未执行（待驾驶员真机：桌面 Chrome + 375px 触屏）。
 - **driver**：pending —— 未验收。
 
+**发布证据（2026-09-24 · G5 · 驾驶员授权「还可以发布吧」）**：
+- 仓库：https://github.com/huadenghuo/orbit-lab（公开，8 文件，远端首个内容提交 2b781f5）
+- Pages：https://huadenghuo.github.io/orbit-lab/ —— HTTP 200（第 2 次探测，29316 字符，含页面标题）✅
+- 主页：5/5 仓库 Website 字段已填；个人主页 README 第五行已写入并 raw 验证 ✅
+- 管线修复：gh_sync 支持 `<仓库名>-files.txt` 清单（绕过沙箱 spawn EPERM，保留 execSync 回退）；gh_profile 更新 README 已带 sha
+- **注：发布 ≠ 验收**——acceptance 保持 realHost=pending、driver=pending，state=automated-evidence
+
 ## 开放风险
 
 1. real-host 门未过：浏览器真实渲染、拖拽手势、触屏缩放尚未在真机验证（自动化不能替代）。
 2. 时间缩放高挡受每帧 800 子步上限约束（保护低端设备的取舍，README 已注明）。
 3. 八字解回归触底 1.8e-5（初值精度地板）：若未来要更紧阈值，需换更高精度初始条件。
 4. `assets/*.gif` 仍为占位：录制三张 GIF 后 README 首屏才完整（不阻塞试用）。
+5. **GH_TOKEN 已在对话内交付**（classic PAT，repo scope）——发布动作已全部完成，请到 https://github.com/settings/tokens 撤销该 token。
+6. 本地 git 与远端历史不同步属既定设计（发布走 GitHub API 管线，本地仓库只作文件清单与工作副本），不影响后续 `gh_sync`。
 
 ## 下一道门
 
