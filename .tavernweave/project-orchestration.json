@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "authoritySchema": "tavernweave/project-orchestration/v1",
+  "projectId": "orbit-lab",
+  "title": "天体轨道实验室 Orbit Lab",
+  "profile": "single-blueprint",
+  "state": "automated-evidence",
+  "authorityFile": "总设计案.md",
+  "nextFile": "NEXT.md",
+  "blueprintPolicy": {
+    "masterFile": "项目实现步骤蓝图.md",
+    "maxDepth": 1,
+    "maxChildren": 0,
+    "runtimePersistentBlueprintBudget": 0,
+    "blueprints": [
+      {
+        "id": "BP-ROOT",
+        "path": "项目实现步骤蓝图.md",
+        "parentId": null,
+        "depth": 1,
+        "status": "active"
+      }
+    ]
+  },
+  "runtimeRefinementPolicy": {
+    "trigger": "observed-problem-or-failed-exit-condition",
+    "maxDepth": 1,
+    "maxOpenBranches": 1,
+    "persistent": false,
+    "mayExpandProductScope": false,
+    "mustReturnToParent": true
+  },
+  "runtimeRefinements": [],
+  "discussionDirections": [
+    { "id": "D1", "topic": "项目定位：天体轨道实验室 orbit-lab 延续科学沙盒四件套", "level": "foundational", "roundLimit": 4, "roundsUsed": 2, "status": "closed", "decisionIds": ["选题=天体轨道实验室", "命名=orbit-lab"] },
+    { "id": "D2", "topic": "First Playable 合同：积分器范围、单位制、失败路径", "level": "core", "roundLimit": 3, "roundsUsed": 2, "status": "closed", "decisionIds": ["决策①引擎层三实现+UI切换+误差曲线", "决策②归一化单位"] },
+    { "id": "D3", "topic": "工程结构与发布链复用（单文件、test 桩、eo-site）", "level": "standard", "roundLimit": 2, "roundsUsed": 1, "status": "active", "decisionIds": ["复用 evolution-sim 测试桩模式"] },
+    { "id": "D4", "topic": "UI 视觉细节专项", "level": "standard", "roundLimit": 2, "roundsUsed": 0, "status": "parked", "decisionIds": [] },
+    { "id": "D5", "topic": "V2 功能（星系/相对论/洛希极限等）", "level": "peripheral", "roundLimit": 1, "roundsUsed": 0, "status": "parked", "decisionIds": [] }
+  ],
+  "frontendDecision": {
+    "recommended": "independent-ui",
+    "fit": "suitable",
+    "reason": "核心价值是拖拽-演化-观察的实时交互，状态源明确（单一 state 对象），Canvas 擅长轨迹渲染，四件套已有同款宿主与部署链",
+    "fallback": "移动端性能不足时降 DPR、限子步、缩短拖尾，不换形态",
+    "reopenWhen": "需要 3D/WebGL 或多人实时协作时重新评估承载面",
+    "driverOverride": false,
+    "prototypeGateRequired": false,
+    "realHostGateRequired": false
+  },
+  "acceptance": {
+    "automated": "passed",
+    "staticPreview": "passed",
+    "realHost": "pending",
+    "driver": {
+      "status": "pending",
+      "source": "driver"
+    }
+  }
+}

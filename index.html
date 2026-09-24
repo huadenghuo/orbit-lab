@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="description" content="天体轨道实验室 Orbit Lab · 零依赖单文件 N 体轨道力学沙盒：三积分器对比、能量守恒误差曲线、三体混沌与引力弹弓。"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>"/>
+<title>天体轨道实验室 · Orbit Lab</title>
+<style>
+:root{--bg:#05070f;--panel:rgba(13,18,34,.93);--line:#1e2a44;--txt:#cfe3ff;--dim:#7d93b8;--acc:#5ab0ff;--warn:#ffb454}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;-webkit-tap-highlight-color:transparent}
+#sky{position:fixed;inset:0;display:block;touch-action:none;cursor:crosshair}
+body.pan #sky{cursor:grab}
+#topbar{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:8px 10px;background:linear-gradient(180deg,rgba(5,7,15,.9),rgba(5,7,15,0));pointer-events:none;flex-wrap:wrap;z-index:5}
+#topbar>*{pointer-events:auto}
+.brand{font-weight:700;font-size:15px;letter-spacing:.5px;text-shadow:0 1px 6px #000}
+.brand span{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+.preset,.iconbtn,.seg button,#panel button{background:rgba(20,28,50,.85);border:1px solid var(--line);color:var(--txt);padding:5px 10px;border-radius:8px;font-size:12px;cursor:pointer;transition:.15s}
+.preset:hover,.iconbtn:hover,#panel button:hover{border-color:var(--acc);color:#fff}
+.preset.on{border-color:var(--acc);background:rgba(90,176,255,.18)}
+#panelToggle{margin-left:auto}
+#hud{position:fixed;left:10px;top:48px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:11px/1.7 ui-monospace,Consolas,monospace;color:var(--dim);z-index:4;pointer-events:none;min-width:168px}
+#hud div{display:flex;justify-content:space-between;gap:10px}
+#hud b{color:var(--txt);font-weight:600}
+#panel{position:fixed;right:10px;top:48px;width:264px;max-height:calc(100vh - 60px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;z-index:6;transition:transform .2s}
+#panel:not(.open){transform:translateX(115%)}
+#panel h3{font-size:11px;color:var(--dim);letter-spacing:1.5px;margin:12px 0 2px;text-transform:uppercase}
+#panel h3:first-child{margin-top:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;font-size:12.5px}
+.row .val{color:var(--acc);font:11px ui-monospace,monospace;min-width:52px;text-align:right}
+.row input[type=range]{flex:1;accent-color:var(--acc);min-width:0}
+.row select{background:#0e1526;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px}
+.btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.btnrow button{flex:1;min-width:60px}
+.seg{display:flex;gap:0;margin-top:4px}
+.seg button{flex:1;border-radius:0}
+.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0;border-left:0}
+.seg button.active{background:rgba(90,176,255,.2);border-color:var(--acc);color:#fff}
+#panel .about{font-size:11px;color:var(--dim);margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+#chart{position:fixed;left:10px;bottom:10px;width:288px;height:132px;background:var(--panel);border:1px solid var(--line);border-radius:10px;z-index:4}
+#hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(20,28,50,.92);border:1px solid var(--line);color:var(--dim);font-size:12px;padding:6px 14px;border-radius:99px;z-index:4;transition:opacity 1s;text-align:center;max-width:92vw}
+#toast{position:fixed;left:50%;top:64px;transform:translateX(-50%) translateY(-8px);background:#2a1620;border:1px solid #a43c4e;color:#ffd9de;padding:10px 14px;border-radius:10px;display:none;z-index:9;max-width:92vw;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#toast.show{display:block;transform:translateX(-50%)}
+#toast b{color:#ff8ba0}
+#toast .btnrow{margin-top:8px}
+@media (max-width:860px){
+  #panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:54vh;border-radius:16px 16px 0 0}
+  #panel:not(.open){transform:translateY(115%)}
+  #chart{width:172px;height:92px;bottom:8px;left:8px}
+  #hud{top:44px;font-size:10px;min-width:150px}
+  .brand span{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<header id="topbar">
+  <div class="brand">🪐 天体轨道实验室<span>Orbit Lab</span></div>
+  <button class="preset on" data-p="earthmoon">🌍 地月系统</button>
+  <button class="preset" data-p="figure8">🌀 三体八字</button>
+  <button class="preset" data-p="slingshot">☄️ 引力弹弓</button>
+  <button class="preset" data-p="empty">✨ 清空</button>
+  <button class="iconbtn" id="panelToggle">⚙︎ 控制台</button>
+</header>
+
+<div id="hud">
+  <div><span>天体数</span><b id="hN">0</b></div>
+  <div><span>模拟时间 t</span><b id="hT">0</b></div>
+  <div><span>总能量 E</span><b id="hE">0</b></div>
+  <div><span>ΔE / E₀</span><b id="hRel">0</b></div>
+  <div><span>角动量 L</span><b id="hL">0</b></div>
+  <div><span>FPS</span><b id="hFps">0</b></div>
+</div>
+
+<canvas id="chart"></canvas>
+<div id="hint">拖住空白处拉出速度箭头 → 松手发射天体 · 滚轮/双指缩放 · 空格暂停 · R 重置</div>
+
+<aside id="panel">
+  <h3>模拟控制</h3>
+  <div class="btnrow">
+    <button id="btnPlay">⏸ 暂停</button>
+    <button id="btnStep">⏭ 单步</button>
+    <button id="btnReset">↺ 重置</button>
+  </div>
+  <div class="row"><label>时间缩放</label><input id="rTs" type="range" min="0" max="100" step="1" value="33"/><span class="val" id="vTs">0.98×</span></div>
+
+  <h3>积分器（对比实验）</h3>
+  <div class="row"><select id="selInteg">
+    <option value="leapfrog" selected>蛙跳 Leapfrog（辛·守恒）</option>
+    <option value="euler">半隐式欧拉（会注入能量）</option>
+    <option value="rk4">RK4（高精度·非辛）</option>
+  </select></div>
+  <div class="row" style="font-size:11px;color:var(--dim)">切换积分器看下方误差曲线：<span style="color:var(--warn)">欧拉上扬，蛙跳贴底</span></div>
+
+  <h3>参数（归一化单位）</h3>
+  <div class="row"><label>引力常数 G</label><input id="rG" type="range" min="0.1" max="3" step="0.05" value="1"/><span class="val" id="vG">1.00</span></div>
+  <div class="row"><label>步长 dt</label><input id="rDt" type="range" min="0.0005" max="0.01" step="0.0005" value="0.002"/><span class="val" id="vDt">0.0020</span></div>
+  <div class="row"><label>拖尾长度</label><input id="rTrail" type="range" min="0" max="1200" step="50" value="600"/><span class="val" id="vTrail">600</span></div>
+  <div class="row"><label>近距离接触</label><select id="selCollision"><option value="merge" selected>合并（非弹性）</option><option value="pass">穿透</option></select></div>
+
+  <h3>视角与选中</h3>
+  <div class="seg">
+    <button id="modeCreate" class="active">✚ 创建</button>
+    <button id="modePan">✋ 平移</button>
+  </div>
+  <div class="btnrow"><button id="btnDelete">🗑 删除选中天体</button></div>
+
+  <div class="about">零依赖单文件 · 自研 N 体引擎 · 归一化单位（长度≈轨道半径、G 可调）。左下曲线为能量相对误差 log₁₀|ΔE/E₀|，E₀ 在场景重置/加天体/改 G 时刷新；切换积分器不刷新，便于同场对比。</div>
+</aside>
+
+<div id="toast"><b>⚠ 轨道已发散</b>（数值不稳定：位置或速度溢出）。试试更小的 dt、更短的时间缩放，或换成蛙跳/RK4。
+  <div class="btnrow"><button id="toastReset">↺ 重置场景</button><button id="toastClose">关闭</button></div>
+</div>
+
+<noscript>本页面需要启用 JavaScript。</noscript>
+
+<script>
+(function(){
+"use strict";
+
+/* ================= 纯引擎（无 DOM，可被 Node 测试直接驱动） ================= */
+var VEL_K = 0.9;            // 拖拽长度 -> 初速度 的比例
+var DIVERGED_LIMIT = 1e5;   // 位置发散阈值
+var MAX_SUBSTEPS = 800;     // 每帧子步上限（保护低端设备）
+var PALETTE = ['#5ab0ff','#ffb454','#8ef58a','#ff7ab6','#c792ea','#f7f762'];
+var PERIOD8 = 6.32591398;   // 三体八字解周期（Chenciner-Montgomery）
+
+function makeBody(o){
+  var b = {x:0,y:0,vx:0,vy:0,m:0.05,r:0.03,color:'#5ab0ff',name:'',trail:[]};
+  if(o) for(var k in o) b[k] = o[k];
+  if(!b.trail) b.trail = [];
+  return b;
+}
+
+// 两两牛顿引力 + 软化：a_i = G m_j (d)/(|d|^2+eps^2)^{3/2}
+function forces(bs, G, eps){
+  var n = bs.length, ax = new Float64Array(n), ay = new Float64Array(n), e2 = eps*eps;
+  for(var i=0;i<n;i++){
+    var bi = bs[i];
+    for(var j=i+1;j<n;j++){
+      var bj = bs[j];
+      var dx = bj.x-bi.x, dy = bj.y-bi.y;
+      var d2 = dx*dx+dy*dy+e2;
+      var inv = 1/(d2*Math.sqrt(d2));
+      var si = G*inv;
+      ax[i] += si*bj.m*dx;  ay[i] += si*bj.m*dy;
+      ax[j] -= si*bi.m*dx;  ay[j] -= si*bi.m*dy;
+    }
+  }
+  return {ax:ax, ay:ay};
+}
+
+function stepEuler(bs, h, G, eps){          // 半隐式欧拉（辛，但只一阶）
+  var f = forces(bs,G,eps);
+  for(var i=0;i<bs.length;i++){
+    var b = bs[i];
+    b.vx += f.ax[i]*h; b.vy += f.ay[i]*h;
+    b.x  += b.vx*h;    b.y  += b.vy*h;
+  }
+}
+
+function stepLeapfrog(bs, h, G, eps){       // 蛙跳 kick-drift-kick（辛、二阶、长期稳定）
+  var half = h/2, i, b;
+  var f = forces(bs,G,eps);
+  for(i=0;i<bs.length;i++){ b=bs[i]; b.vx+=f.ax[i]*half; b.vy+=f.ay[i]*half; b.x+=b.vx*h; b.y+=b.vy*h; }
+  f = forces(bs,G,eps);
+  for(i=0;i<bs.length;i++){ b=bs[i]; b.vx+=f.ax[i]*half; b.vy+=f.ay[i]*half; }
+}
+
+function stepRK4(bs, h, G, eps){            // 经典四阶 Runge-Kutta（高精度、非辛）
+  var n = bs.length, i, j;
+  var s = new Float64Array(4*n), mass = new Float64Array(n);
+  for(i=0;i<n;i++){ var bi=bs[i]; s[4*i]=bi.x; s[4*i+1]=bi.y; s[4*i+2]=bi.vx; s[4*i+3]=bi.vy; mass[i]=bi.m; }
+  function deriv(st){
+    var views = new Array(n);
+    for(var k=0;k<n;k++) views[k] = {x:st[4*k], y:st[4*k+1], m:mass[k]};
+    var f = forces(views, G, eps);
+    var d = new Float64Array(4*n);
+    for(var q=0;q<n;q++){
+      d[4*q]=st[4*q+2]; d[4*q+1]=st[4*q+3];
+      d[4*q+2]=f.ax[q]; d[4*q+3]=f.ay[q];
+    }
+    return d;
+  }
+  var k1 = deriv(s);
+  var t2 = new Float64Array(4*n); for(j=0;j<4*n;j++) t2[j]=s[j]+k1[j]*h/2; var k2 = deriv(t2);
+  var t3 = new Float64Array(4*n); for(j=0;j<4*n;j++) t3[j]=s[j]+k2[j]*h/2; var k3 = deriv(t3);
+  var t4 = new Float64Array(4*n); for(j=0;j<4*n;j++) t4[j]=s[j]+k3[j]*h;   var k4 = deriv(t4);
+  for(i=0;i<n;i++){
+    var bi2 = bs[i];
+    bi2.x  += h/6*(k1[4*i]  +2*k2[4*i]  +2*k3[4*i]  +k4[4*i]);
+    bi2.y  += h/6*(k1[4*i+1]+2*k2[4*i+1]+2*k3[4*i+1]+k4[4*i+1]);
+    bi2.vx += h/6*(k1[4*i+2]+2*k2[4*i+2]+2*k3[4*i+2]+k4[4*i+2]);
+    bi2.vy += h/6*(k1[4*i+3]+2*k2[4*i+3]+2*k3[4*i+3]+k4[4*i+3]);
+  }
+}
+
+var INTEGRATORS = {euler:stepEuler, leapfrog:stepLeapfrog, rk4:stepRK4};
+
+function energyStats(bs, G, eps){
+  var ke=0, pe=0, e2=eps*eps, i, j;
+  for(i=0;i<bs.length;i++){ var b=bs[i]; ke += 0.5*b.m*(b.vx*b.vx+b.vy*b.vy); }
+  for(i=0;i<bs.length;i++) for(j=i+1;j<bs.length;j++){
+    var a=bs[i], c=bs[j];
+    var dx=c.x-a.x, dy=c.y-a.y;
+    pe -= G*a.m*c.m/Math.sqrt(dx*dx+dy*dy+e2);
+  }
+  return {ke:ke, pe:pe, total:ke+pe};
+}
+
+function angularMomentum(bs){
+  var L=0; for(var i=0;i<bs.length;i++){ var b=bs[i]; L += b.m*(b.x*b.vy-b.y*b.vx); } return L;
+}
+
+// 二体轨道根数（相对坐标，用于开普勒/偏心率断言）
+function orbitElements(a, b, G){
+  var mu = G*(a.m+b.m);
+  var rx=b.x-a.x, ry=b.y-a.y, vx=b.vx-a.vx, vy=b.vy-a.vy;
+  var r = Math.sqrt(rx*rx+ry*ry);
+  var v2 = vx*vx+vy*vy;
+  var specE = v2/2 - mu/r;
+  var hz = rx*vy - ry*vx;
+  var e = Math.sqrt(Math.max(0, 1 + 2*specE*hz*hz/(mu*mu)));
+  return {e:e, r:r, energy:specE};
+}
+
+// 非弹性合并：质量、动量守恒，动能不增
+function mergeBodies(a, b){
+  var m = a.m+b.m;
+  return makeBody({
+    x:(a.x*a.m+b.x*b.m)/m, y:(a.y*a.m+b.y*b.m)/m,
+    vx:(a.vx*a.m+b.vx*b.m)/m, vy:(a.vy*a.m+b.vy*b.m)/m,
+    m:m, r:Math.cbrt(a.r*a.r*a.r+b.r*b.r*b.r),
+    color:a.color, name:a.name||b.name, trail:a.trail
+  });
+}
+
+function isDiverged(bs, limit){
+  limit = limit || DIVERGED_LIMIT;
+  for(var i=0;i<bs.length;i++){
+    var b=bs[i];
+    if(!isFinite(b.x)||!isFinite(b.y)||!isFinite(b.vx)||!isFinite(b.vy)) return true;
+    if(Math.abs(b.x)>limit||Math.abs(b.y)>limit) return true;
+  }
+  return false;
+}
+
+function cloneBodies(bs){
+  var out=[]; for(var i=0;i<bs.length;i++){ var b=makeBody({x:bs[i].x,y:bs[i].y,vx:bs[i].vx,vy:bs[i].vy,m:bs[i].m,r:bs[i].r,color:bs[i].color,name:bs[i].name}); out.push(b); } return out;
+}
+
+// 三个预设（归一化单位：G=1，长度≈轨道半径，时间使主要周期≈6）
+function makePreset(name){
+  if(name==='figure8'){
+    var b1=makeBody({x:-0.97000436, y: 0.24308753, vx: 0.466203685, vy: 0.43236573, m:1, r:0.055, color:PALETTE[0], name:'天体 A'});
+    var b2=makeBody({x: 0.97000436, y:-0.24308753, vx: 0.466203685, vy: 0.43236573, m:1, r:0.055, color:PALETTE[1], name:'天体 B'});
+    var b3=makeBody({x: 0, y: 0, vx:-0.93240737, vy:-0.86473146, m:1, r:0.055, color:PALETTE[2], name:'天体 C'});
+    return {name:'figure8', bodies:[b1,b2,b3], G:1, eps:1e-4, cam:{x:0,y:0,k:3.0}};
+  }
+  if(name==='slingshot'){
+    var star=makeBody({x:0,y:0,vx:0,vy:0,m:2,r:0.126,color:PALETTE[1],name:'大质量恒星'});
+    var probe=makeBody({x:-3,y:0.75,vx:1.5,vy:-0.05,m:0.01,r:0.02,color:PALETTE[2],name:'探测器'});
+    return {name:'slingshot', bodies:[star,probe], G:1, eps:0.01, cam:{x:-0.4,y:0.15,k:6.5}};
+  }
+  if(name==='empty'){
+    return {name:'empty', bodies:[], G:1, eps:0.004, cam:{x:0,y:0,k:3.2}};
+  }
+  // 默认：地月系统（恒星 + 椭圆轨道行星 + 月球）
+  var st=makeBody({x:0,y:0,vx:0,vy:-0.047,m:1,r:0.10,color:PALETTE[1],name:'恒星'});
+  var pl=makeBody({x:1,y:0,vx:0,vy:0.94,m:0.05,r:0.045,color:PALETTE[0],name:'行星'});
+  var mo=makeBody({x:1.14,y:0,vx:0,vy:0.94+0.5976,m:0.0008,r:0.018,color:'#c9d6ea',name:'月球'});
+  return {name:'earthmoon', bodies:[st,pl,mo], G:1, eps:0.004, cam:{x:0,y:0,k:3.2}};
+}
+
+globalThis.OrbitCore = {
+  makeBody:makeBody, forces:forces, INTEGRATORS:INTEGRATORS,
+  energyStats:energyStats, angularMomentum:angularMomentum, orbitElements:orbitElements,
+  mergeBodies:mergeBodies, isDiverged:isDiverged, cloneBodies:cloneBodies, makePreset:makePreset,
+  PALETTE:PALETTE, PERIOD8:PERIOD8, VEL_K:VEL_K
+};
+
+/* ================= 应用层（仅浏览器执行） ================= */
+function boot(){
+  var $ = function(id){ return document.getElementById(id); };
+  var sky=$('sky'), ctx=sky.getContext('2d');
+  var chart=$('chart'), cctx=chart.getContext('2d');
+  var W=0, H=0, DPR=1, stars=[];
+  var scene=null, cam={x:0,y:0,scale:300};
+  var playing=true, ts=1, dt=0.002, trailLen=600, collision='merge', integ='leapfrog', mode='create';
+  var simT=0, selected=null, E0=null, errBuf=[], created=0, diverged=false;
+  var fps=60, lastT=0, frame=0;
+  var arrow=null, panning=null, pinch=null, dragCandidate=null;
+  var pointers=new Map();
+
+  /* ---- 尺寸与星空 ---- */
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    sky.width = Math.round(W*DPR); sky.height = Math.round(H*DPR);
+    sky.style.width = W+'px'; sky.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    var cr = chart.getBoundingClientRect();
+    chart.width = Math.max(1,Math.round(cr.width*DPR));
+    chart.height = Math.max(1,Math.round(cr.height*DPR));
+    cctx.setTransform(DPR,0,0,DPR,0,0);
+    var s = 12345;
+    stars = [];
+    for(var i=0;i<230;i++){
+      s = (s*1664525+1013904223)>>>0; var rx = s/4294967296;
+      s = (s*1664525+1013904223)>>>0; var ry = s/4294967296;
+      s = (s*1664525+1013904223)>>>0; var rr = s/4294967296;
+      stars.push({x:rx*W, y:ry*H, r:rr*1.2+0.2, a:rr*0.5+0.18});
+    }
+  }
+  function toSx(wx){ return W/2 + (wx-cam.x)*cam.scale; }
+  function toSy(wy){ return H/2 + (wy-cam.y)*cam.scale; }
+  function toWorld(p){ return {x:(p.x-W/2)/cam.scale+cam.x, y:(p.y-H/2)/cam.scale+cam.y}; }
+  function hexA(hex,a){
+    var r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    return 'rgba('+r+','+g+','+b+','+a+')';
+  }
+
+  /* ---- 场景 ---- */
+  function resetE0(){
+    E0 = scene.bodies.length ? energyStats(scene.bodies, scene.G, scene.eps).total : 0;
+    errBuf = [];
+  }
+  function loadPreset(name){
+    scene = makePreset(name);
+    cam.x = scene.cam.x; cam.y = scene.cam.y;
+    cam.scale = Math.min(W,H)/scene.cam.k;
+    simT = 0; selected = null; diverged = false;
+    playing = true; syncPlay(); hideToast();
+    resetE0();
+    var btns = document.querySelectorAll('.preset');
+    for(var i=0;i<btns.length;i++) btns[i].classList.toggle('on', btns[i].dataset.p===name);
+  }
+  function advance(h){ INTEGRATORS[integ](scene.bodies, h, scene.G, scene.eps); simT += h; }
+  function checkMerges(){
+    var bs = scene.bodies;
+    for(var i=0;i<bs.length;i++){
+      for(var j=i+1;j<bs.length;j++){
+        var a=bs[i], b=bs[j];
+        var d=Math.hypot(b.x-a.x, b.y-a.y);
+        if(d < a.r+b.r){
+          var nb = mergeBodies(a,b);
+          bs.splice(j,1); bs.splice(i,1); bs.push(nb);
+          if(selected===a||selected===b) selected = nb;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function recordTrails(){
+    var minStep = 0.6/cam.scale;
+    for(var i=0;i<scene.bodies.length;i++){
+      var t = scene.bodies[i].trail, last = t[t.length-1];
+      if(!last || Math.hypot(scene.bodies[i].x-last[0], scene.bodies[i].y-last[1]) > minStep)
+        t.push([scene.bodies[i].x, scene.bodies[i].y]);
+      while(t.length > trailLen) t.shift();
+    }
+  }
+  function sampleError(){
+    if(E0===null) return;
+    var E = energyStats(scene.bodies, scene.G, scene.eps).total;
+    var err = (E-E0)/Math.max(Math.abs(E0),1e-12);
+    errBuf.push(err);
+    if(errBuf.length>400) errBuf.shift();
+  }
+  function onDiverged(){
+    diverged = true; playing = false; syncPlay();
+    $('toast').classList.add('show');
+  }
+  function hideToast(){ $('toast').classList.remove('show'); }
+
+  /* ---- 渲染 ---- */
+  function drawSky(){
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(0,0,W,H);
+    for(var i=0;i<stars.length;i++){
+      var s=stars[i];
+      ctx.globalAlpha = s.a;
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillRect(s.x, s.y, s.r, s.r);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawTrailsAndBodies(){
+    var i, b, t, p;
+    for(i=0;i<scene.bodies.length;i++){
+      b = scene.bodies[i]; t = b.trail;
+      if(t.length<2) continue;
+      ctx.beginPath();
+      for(var k=0;k<t.length;k++){
+        p = t[k];
+        if(k===0) ctx.moveTo(toSx(p[0]), toSy(p[1])); else ctx.lineTo(toSx(p[0]), toSy(p[1]));
+      }
+      ctx.strokeStyle = hexA(b.color, 0.55);
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+    for(i=0;i<scene.bodies.length;i++){
+      b = scene.bodies[i];
+      var x = toSx(b.x), y = toSy(b.y), r = Math.max(2, b.r*cam.scale);
+      ctx.save();
+      ctx.shadowColor = b.color; ctx.shadowBlur = Math.min(20, r*2.2);
+      ctx.fillStyle = b.color;
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.28318); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(255,255,255,.78)';
+      ctx.beginPath(); ctx.arc(x-r*0.28, y-r*0.30, Math.max(1,r*0.34), 0, 6.28318); ctx.fill();
+      if(b.name){
+        ctx.fillStyle = 'rgba(200,220,255,.85)';
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.name, x, y-r-7);
+      }
+      if(b===selected){
+        ctx.strokeStyle = '#5ab0ff'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([4,4]);
+        ctx.beginPath(); ctx.arc(x,y,r+7,0,6.28318); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+  function drawArrow(){
+    if(!arrow) return;
+    var x0=toSx(arrow.from.x), y0=toSy(arrow.from.y);
+    var x1=toSx(arrow.to.x),   y1=toSy(arrow.to.y);
+    ctx.save();
+    ctx.strokeStyle = '#5ab0ff'; ctx.lineWidth = 2; ctx.setLineDash([6,5]);
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    ctx.setLineDash([]);
+    var ang = Math.atan2(y1-y0, x1-x0);
+    ctx.fillStyle = '#5ab0ff';
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x1-10*Math.cos(ang-0.4), y1-10*Math.sin(ang-0.4));
+    ctx.lineTo(x1-10*Math.cos(ang+0.4), y1-10*Math.sin(ang+0.4));
+    ctx.closePath(); ctx.fill();
+    var spd = Math.hypot(arrow.to.x-arrow.from.x, arrow.to.y-arrow.from.y)*VEL_K;
+    ctx.font = '12px ui-monospace, monospace';
+    ctx.fillStyle = '#ffb454';
+    ctx.textAlign = 'left';
+    ctx.fillText('v = '+spd.toFixed(2), x1+8, y1-8);
+    ctx.fillStyle = 'rgba(90,176,255,.35)';
+    ctx.beginPath(); ctx.arc(x0,y0,5,0,6.28318); ctx.fill();
+    ctx.restore();
+  }
+  function drawChart(){
+    var w = chart.clientWidth, h = chart.clientHeight;
+    if(w<10||h<10) return;
+    cctx.clearRect(0,0,w,h);
+    var padL=32, padR=6, padT=18, padB=12;
+    var ymin=-14, ymax=-1;
+    cctx.font = '9px ui-monospace, monospace';
+    cctx.textAlign = 'left';
+    for(var k=ymax; k>=ymin; k-=3){
+      var yy = padT + (ymax-k)/(ymax-ymin)*(h-padT-padB);
+      cctx.strokeStyle = 'rgba(30,42,68,.85)';
+      cctx.beginPath(); cctx.moveTo(padL,yy); cctx.lineTo(w-padR,yy); cctx.stroke();
+      cctx.fillStyle = '#7d93b8';
+      cctx.fillText('1e'+k, 2, yy+3);
+    }
+    cctx.fillStyle = '#7d93b8';
+    cctx.fillText('能量误差 log10|dE/E0|', padL, 11);
+    if(errBuf.length>1){
+      cctx.strokeStyle = '#ffb454';
+      cctx.lineWidth = 1.5;
+      cctx.beginPath();
+      for(var i=0;i<errBuf.length;i++){
+        var lg = Math.log10(Math.max(Math.abs(errBuf[i]),1e-16));
+        if(lg<ymin) lg=ymin; if(lg>ymax) lg=ymax;
+        var x = padL + i/(errBuf.length-1)*(w-padL-padR);
+        var y = padT + (ymax-lg)/(ymax-ymin)*(h-padT-padB);
+        if(i===0) cctx.moveTo(x,y); else cctx.lineTo(x,y);
+      }
+      cctx.stroke();
+    }else{
+      cctx.fillStyle = '#43536f';
+      cctx.fillText('采样中…', padL+8, h/2);
+    }
+  }
+
+  /* ---- HUD ---- */
+  function updateHUD(){
+    $('hN').textContent = scene.bodies.length;
+    $('hT').textContent = simT.toFixed(2);
+    if(scene.bodies.length && E0!==null){
+      var st = energyStats(scene.bodies, scene.G, scene.eps);
+      $('hE').textContent = st.total.toFixed(5);
+      var rel = (st.total-E0)/Math.max(Math.abs(E0),1e-12);
+      $('hRel').textContent = rel.toExponential(2);
+      $('hL').textContent = angularMomentum(scene.bodies).toFixed(4);
+    }else{
+      $('hE').textContent='—'; $('hRel').textContent='—'; $('hL').textContent='—';
+    }
+    $('hFps').textContent = fps.toFixed(0);
+  }
+
+  /* ---- 主循环 ---- */
+  function tick(now){
+    requestAnimationFrame(tick);
+    var wall = Math.min((now-lastT)/1000, 0.05);
+    if(wall<=0) wall = 1/60;
+    lastT = now;
+    fps = fps*0.92 + (1/wall)*0.08;
+    var stepped = false;
+    if(playing && !diverged && scene.bodies.length){
+      var n = Math.round(wall*ts/dt);
+      if(n<0) n=0;
+      if(n>MAX_SUBSTEPS) n=MAX_SUBSTEPS;
+      for(var i=0;i<n;i++) advance(dt);
+      stepped = n>0;
+    }
+    if(stepped){
+      if(collision==='merge' && checkMerges()) resetE0();
+      recordTrails();
+      if(isDiverged(scene.bodies)) onDiverged();
+      if(++frame % 3 === 0) sampleError();
+    }
+    drawSky();
+    drawTrailsAndBodies();
+    drawArrow();
+    drawChart();
+    if(frame % 12 === 0) updateHUD();
+  }
+
+  /* ---- 指针交互 ---- */
+  function evPos(e){ return {x:e.clientX, y:e.clientY}; }
+  function hitTest(p){
+    for(var i=scene.bodies.length-1;i>=0;i--){
+      var b = scene.bodies[i];
+      var r = Math.max(b.r*cam.scale, 10);
+      if(Math.hypot(p.x-toSx(b.x), p.y-toSy(b.y)) <= r) return b;
+    }
+    return null;
+  }
+  function mkPinch(){
+    var vals = Array.from(pointers.values());
+    var a=vals[0], b=vals[1];
+    var d = Math.hypot(a.x-b.x, a.y-b.y) || 1;
+    var mid = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    return {d0:d, s0:cam.scale, w0:toWorld(mid)};
+  }
+  function updatePinch(){
+    var vals = Array.from(pointers.values());
+    if(vals.length<2) return;
+    var a=vals[0], b=vals[1];
+    var d = Math.hypot(a.x-b.x, a.y-b.y) || 1;
+    var mid = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    cam.scale = Math.max(8, Math.min(4000, pinch.s0*(d/pinch.d0)));
+    cam.x = pinch.w0.x - (mid.x-W/2)/cam.scale;
+    cam.y = pinch.w0.y - (mid.y-H/2)/cam.scale;
+  }
+  sky.addEventListener('pointerdown', function(e){
+    sky.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, evPos(e));
+    if(pointers.size===2){ arrow=null; dragCandidate=null; panning=null; pinch=mkPinch(); return; }
+    var p = evPos(e);
+    var forcePan = (mode==='pan') || e.button===1 || e.button===2;
+    if(forcePan){ panning = {p0:p, c0:{x:cam.x,y:cam.y}}; return; }
+    var hit = hitTest(p);
+    if(hit){ dragCandidate = {b:hit, p0:p}; }
+    else { arrow = {from:toWorld(p), to:toWorld(p)}; }
+  });
+  sky.addEventListener('pointermove', function(e){
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, evPos(e));
+    if(pinch){ updatePinch(); return; }
+    var p = evPos(e);
+    if(panning){
+      cam.x = panning.c0.x - (p.x-panning.p0.x)/cam.scale;
+      cam.y = panning.c0.y - (p.y-panning.p0.y)/cam.scale;
+      return;
+    }
+    if(arrow){ arrow.to = toWorld(p); }
+  });
+  function endPointer(e){
+    var p = evPos(e);
+    pointers.delete(e.pointerId);
+    if(pinch && pointers.size<2) pinch = null;
+    if(panning && pointers.size===0) panning = null;
+    if(arrow && pointers.size===0){
+      var px0=toSx(arrow.from.x), py0=toSy(arrow.from.y);
+      if(Math.hypot(p.x-px0, p.y-py0) > 6){
+        var to = toWorld(p);
+        created++;
+        var nb = makeBody({
+          x:arrow.from.x, y:arrow.from.y,
+          vx:(to.x-arrow.from.x)*VEL_K, vy:(to.y-arrow.from.y)*VEL_K,
+          m:0.05, r:0.03,
+          color:PALETTE[(created-1)%PALETTE.length],
+          name:'新天体 '+created
+        });
+        scene.bodies.push(nb);
+        resetE0();
+      }
+      arrow = null;
+    }
+    if(dragCandidate && pointers.size===0){
+      var dist = Math.hypot(p.x-dragCandidate.p0.x, p.y-dragCandidate.p0.y);
+      if(dist<6) selected = (selected===dragCandidate.b ? null : dragCandidate.b);
+      else selected = dragCandidate.b;
+      dragCandidate = null;
+      updateHUD();
+    }
+  }
+  sky.addEventListener('pointerup', endPointer);
+  sky.addEventListener('pointercancel', endPointer);
+  sky.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var p = evPos(e), w0 = toWorld(p);
+    cam.scale = Math.max(8, Math.min(4000, cam.scale*Math.pow(1.0015, -e.deltaY)));
+    var w1 = toWorld(p);
+    cam.x += w0.x-w1.x; cam.y += w0.y-w1.y;
+  }, {passive:false});
+  sky.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  /* ---- 控件 ---- */
+  function syncPlay(){ $('btnPlay').textContent = playing ? '⏸ 暂停' : '▶ 播放'; }
+  function stepOnce(){
+    if(diverged || !scene.bodies.length) return;
+    advance(dt);
+    if(collision==='merge' && checkMerges()) resetE0();
+    recordTrails();
+    if(isDiverged(scene.bodies)) onDiverged();
+    sampleError();
+    updateHUD();
+  }
+  function deleteSelected(){
+    if(!selected) return;
+    var i = scene.bodies.indexOf(selected);
+    if(i>=0) scene.bodies.splice(i,1);
+    selected = null;
+    resetE0();
+    updateHUD();
+  }
+  function setMode(m){
+    mode = m;
+    document.body.classList.toggle('pan', m==='pan');
+    $('modeCreate').classList.toggle('active', m==='create');
+    $('modePan').classList.toggle('active', m==='pan');
+  }
+  var btns = document.querySelectorAll('.preset');
+  for(var i=0;i<btns.length;i++){
+    (function(btn){ btn.addEventListener('click', function(){ loadPreset(btn.dataset.p); }); })(btns[i]);
+  }
+  $('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
+  $('btnPlay').addEventListener('click', function(){ if(!diverged){ playing=!playing; syncPlay(); } });
+  $('btnStep').addEventListener('click', function(){ playing=false; syncPlay(); stepOnce(); });
+  $('btnReset').addEventListener('click', function(){ loadPreset(scene.name); });
+  $('btnDelete').addEventListener('click', deleteSelected);
+  $('modeCreate').addEventListener('click', function(){ setMode('create'); });
+  $('modePan').addEventListener('click', function(){ setMode('pan'); });
+  $('selInteg').addEventListener('change', function(){ integ = this.value; }); // 不刷新 E0：同场对比
+  $('selCollision').addEventListener('change', function(){ collision = this.value; });
+  $('rG').addEventListener('input', function(){ scene.G = +this.value; $('vG').textContent = scene.G.toFixed(2); resetE0(); });
+  $('rDt').addEventListener('input', function(){ dt = +this.value; $('vDt').textContent = dt.toFixed(4); });
+  $('rTs').addEventListener('input', function(){ ts = 0.1*Math.pow(1000, +this.value/100); $('vTs').textContent = ts.toFixed(2)+'×'; });
+  $('rTrail').addEventListener('input', function(){ trailLen = +this.value; $('vTrail').textContent = trailLen; });
+  $('toastReset').addEventListener('click', function(){ loadPreset(scene.name); });
+  $('toastClose').addEventListener('click', hideToast);
+  window.addEventListener('keydown', function(e){
+    var tag = e.target && e.target.tagName;
+    if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
+    if(e.code==='Space'){ e.preventDefault(); if(!diverged){ playing=!playing; syncPlay(); } }
+    else if(e.key==='r'||e.key==='R'){ loadPreset(scene.name); }
+    else if(e.key==='s'||e.key==='S'){ playing=false; syncPlay(); stepOnce(); }
+    else if(e.key==='Delete'||e.key==='Backspace'){ if(selected){ e.preventDefault(); deleteSelected(); } }
+  });
+  window.addEventListener('resize', function(){
+    resize();
+    if(scene && scene.cam) cam.scale = Math.min(W,H)/scene.cam.k;
+  });
+
+  /* ---- 启动 ---- */
+  resize();
+  if(window.innerWidth > 860) $('panel').classList.add('open'); // 桌面默认展开，移动端保持收起
+  loadPreset('earthmoon');
+  setMode('create');
+  syncPlay();
+  updateHUD();
+  var hint = $('hint');
+  setTimeout(function(){ hint.style.opacity = '0'; }, 9000);
+  requestAnimationFrame(function(t){ lastT = t; tick(t); });
+}
+
+if(typeof document!=="undefined" && document.getElementById){
+  try{ boot(); }catch(err){ if(typeof console!=="undefined") console.error(err); }
+}
+})();
+</script>
+</body>
+</html>
